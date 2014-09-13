@@ -1,0 +1,174 @@
+---
+title: 'Coursera''s Reproducible Research: Peer Assignment 2'
+author: "JJMcKay"
+date: "Friday, September 12, 2014"
+output: html_document
+---
+
+##Synopsis
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+##Analysis
+
+We begin to answer our question using the dataset of observed storm events
+from the [National Climactic Data Center](http://www.ncdc.noaa.gov/) of the
+[National Oceanic Atmospheric Administration](http://www.noaa.gov/). The
+dataset and others like it (most broken down by year) are available from
+[Storm Events Database](http://www.ncdc.noaa.gov/stormevents/)
+at the National Weather Service website. Specific Storm Events Database URLs
+used in this anlaysis include:
+
+- [Bulk Download Page](http://www.ncdc.noaa.gov/stormevents/ftp.jsp)
+ - [Codebook](http://www1.ncdc.noaa.gov/pub/data/swdi/stormevents/csvfiles/Storm-Data-Export-Format.docx)
+ - [README](http://www1.ncdc.noaa.gov/pub/data/swdi/stormevents/csvfiles/README)
+ - [Directory of datasets](http://www1.ncdc.noaa.gov/pub/data/swdi/stormevents/csvfiles/)
+- [Detailed information on the gathering of this data](http://www.ncdc.noaa.gov/stormevents/pd01016005curr.pdf)
+- [Storm Data FAQ Page](http://www.ncdc.noaa.gov/stormevents/faq.jsp)
+
+
+With the dataset in its current form, there are four primary variable columns
+which are relevant to our research questions. They are:
+
+With respect to population health:
+- ***fatalities*** : *numeric* - Fatalities. Deaths resulting directly from the
+observed storm.
+- ***injuries*** : *numeric* - Injuries. Injuries directly resulting directly from
+the observed storm.
+
+And with respect to local economies:
+- ***propdmg*** : *numeric* - Monetary amount in USD of property damage resulting directly
+from theobserved storm.
+- ***cropdmg*** : *numeric* - Monetary amount in USD of crop damage resulting directly
+from the observed storm.
+
+The local economy variables are themselves modified by a column vector of
+multipliers which can be translated into E notation (e.g. 10E6 = 1,000,000)
+and multiplied with the monetary damage variables
+- ***propdmgexp*** : *numeric* - An exponent of 10, together used to multiply with
+**propdmg**
+- ***cropdmgexp*** : *numeric*
+
+
+
+```{r keepcols}
+health.cols <- c("fatalities", "injuries")
+econ.cols <- c("propdmg", "cropdmg")
+econ.mults <- c("propdmgexp", "cropdmgexp")
+```
+
+```{r downloadpreprocess, cache = TRUE}
+url <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+file <- "./data/stormdata.csv.bz2"
+dir.create("./data")
+download.file(url.zip, file)
+sd <- read.csv(bzfile(file), stringsAsFactors = FALSE)
+
+## Restyle column names
+colnames(s) <- tolower(colnames(s))
+colnames(s) <- gsub("_", ".", colnames(s))
+colnames(s)[1] <- "state"
+
+## Add a column with just the year as a factor using bgn.date as a source
+#s$year <- factor(strptime(which.max(as.Date(s$bgn.date, format = "%m/%d/%Y %H:%M:%S")), "%Y"))
+s$date
+s$year <- factor(format(as.Date(s$bgn.date[1], "%m/%d/%Y %H:%M:%S"), format = "%Y"))
+s$month <- factor(format(as.Date(s$bgn.date[1], "%m/%d/%Y %H:%M:%S"), format = "%b"))
+
+## With the dataset in its current form, there are four variable columns which
+## are relevant to our research. They are
+
+
+
+## We want to convert NA values to zero
+
+naZ <- function(naz) {
+  
+}
+
+
+## It appears that the data for monetary values was entered in two parts:
+## a number and a multiplier. Worse yet, the multiplier which was
+
+table(s$propdmgexp)
+table(s$cropdmgexp)
+## A glimpse at the tables show us that approximately half of the values were
+## entered as-is and the others used a character to denote the place of the
+## value (i.e. 'M' or 'm' for millions, 'K' or 'k' for thousands). We can induce
+## that the integers represent the exponent of 10 as used in E notation (i.e. )
+## for multiplying the value (i.e. 5 represents a multiplyer of 10E5, or
+## 10,000). Characters such as '-', '?', and '+' account for less than .002%
+## of the property damage data:
+round((sum(s$propdmgexp %in% c("-", '?', "+")) / nrow(s)) * 100, digits = 3)
+## and less than .001% of the crop damage data:
+round((sum(s$cropdmgexp %in% c("-", '?', "+")) / nrow(s)) * 100, digits = 3)
+## these values are likely user error and the associated values will be
+## considered entered as is.
+
+## Conversion
+s$propnumeric()
+
+## Function takes the column (vector) of the raw input multiplier data
+## found in propdmgexp and cropdmgexp.
+convMultInput <- function(raw.col) {
+  ## A character vector of the known characters we know hjow to interpret
+  ## Note we did not add 't' among them as it can stand for either 'tens' or
+  ## 'trillions'. Common sense would have us rule out tens as it's so close to
+  ## the actual value as to be ignored as a multiplier (although 1 itself is
+  ## used as a multiplier a few times). More likely is an event that may cost
+  ## trillions, and we need to be able to handle this multiplier in case of a
+  ## "mega-event" like a tsunami hitting NYC or Godzilla. Therefore we recommend
+  ## the use of the script in the future consider the events using a 't'
+  ## mulitplier for the damage values on a case-by-case basis to determine
+  ## whether the 't' is used to indicate a 'tens' or 'trillions' mulitplier, or
+  ## was simply user error.
+  known.chars <- c(hundreds = "h",
+                   thousands = "k",
+                   millions = "m",
+                   billions = "b")
+  ## Add in their uppercase character equivalents
+  known.chars <- c(known.chars, toupper(known.chars))
+  
+  clean.col <- numeric(length(conv.col))
+  clean.col <- 
+  clean.col[raw.col == "" | raw.col == "0" | raw.col == "")]
+}
+
+```
+
+###Events most harmful with respect to population health?
+
+```{r eventdeathandinjuries}
+## Death and injuries totals and averages by event
+di.tot <- with(s, aggregate(cbind(fatalities, injuries) ~ evtype, data = s, sum))
+di.ave <- with(s, aggregate(cbind(fatalities, injuries) ~ evtype, data = s, mean, na.rm = TRUE))
+
+# head(di[with(di, order(fatalities, injuries, decreasing = TRUE, na.last = NA)), ], 25)
+# head(di.ave[with(di.ave, order(fatalities, injuries, decreasing = TRUE, na.last = NA)), ], 25)
+
+t25.di.ave <- head(di.ave[with(di.ave, order(fatalities, injuries, decreasing = TRUE, na.last = NA)), ], 25)
+t25.di.tot <- head(di.tot[with(di.tot, order(fatalities, injuries, decreasing = TRUE, na.last = NA)), ], 25)
+
+qplot(di.ave$fatalities)
+# ggplot(di.ave, aes(x = evtype, y = fatalities)) + geom_bar(stat = "identity")
+
+```
+
+###Events most harmful with respect to local economy?
+
+
+```{r eventpropertydamage}
+di.tot <- with(s, aggregate(cbind(fatalities, injuries) ~ evtype, data = s, sum))
+di.ave <- with(s, aggregate(cbind(fatalities, injuries) ~ evtype, data = s, mean, na.rm = TRUE))
+
+t25.di.ave <- head(di.ave[with(di.ave, order(fatalities, injuries, decreasing = TRUE, na.last = NA)), ], 25)
+t25.di.tot <- head(di.tot[with(di.tot, order(fatalities, injuries, decreasing = TRUE, na.last = NA)), ], 25)
+
+
+```
+
+
+
