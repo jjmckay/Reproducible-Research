@@ -50,15 +50,36 @@ multipliers which can be translated into E notation (e.g. 10E6 = 1,000,000)
 and multiplied with the monetary damage variables
 - ***propdmgexp*** : *numeric* - An exponent of 10, together used to multiply with
 **propdmg**
-- ***cropdmgexp*** : *numeric*
-
+- ***cropdmgexp*** : *numeric* - An exponent of 10, together used to multiply with
+**cropdmg**
 
 
 ```{r keepcols}
 health.cols <- c("fatalities", "injuries")
 econ.cols <- c("propdmg", "cropdmg")
-econ.mults <- c("propdmgexp", "cropdmgexp")
+econmult.cols <- c("propdmgexp", "cropdmgexp")
 ```
+
+The questions to answer are which events have the most impact on public health
+and local economy. Using what we are given, we will devise simple model for
+evaluating overall health impact by weighting both relevant variables and
+adding them. We will do the same with the economy variables.
+
+```{r impactmodelweights}
+fatality.weight <- 3/4
+injuries.weight <- 1 - fatality.weight
+
+propdmg.weight <- 3/4
+cropdmg.weight <- 1 - propdmg.weight
+```
+
+The models we use will be:
+
+1. Public Health Impact Value = (`r fatality.weight`) * *fatalities* + (`r injuries.weight`) * *injuries*
+
+2. Local Economy Impact Value = (`r propdmg.weight`) * *property damage* + (`r cropdmg.weight`) * *crop damage*
+
+
 
 ```{r downloadpreprocess, cache = TRUE}
 url <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
@@ -72,22 +93,29 @@ colnames(s) <- tolower(colnames(s))
 colnames(s) <- gsub("_", ".", colnames(s))
 colnames(s)[1] <- "state"
 
+
+
+
 ## Add a column with just the year as a factor using bgn.date as a source
 #s$year <- factor(strptime(which.max(as.Date(s$bgn.date, format = "%m/%d/%Y %H:%M:%S")), "%Y"))
-s$date
-s$year <- factor(format(as.Date(s$bgn.date[1], "%m/%d/%Y %H:%M:%S"), format = "%Y"))
-s$month <- factor(format(as.Date(s$bgn.date[1], "%m/%d/%Y %H:%M:%S"), format = "%b"))
+
+e <- data.frame(date = as.Date(s$bgn.date, "%m/%d/%Y %H:%M:%S"),
+                year = factor(format(as.Date(s$bgn.date, "%m/%d/%Y %H:%M:%S"), format = "%Y")),
+                month = factor(format(as.Date(s$bgn.date, "%m/%d/%Y %H:%M:%S"), format = "%b")),
+                evtype = factor(tolower(s$evtype)),
+                fatalities = s$fatalities,
+                injuries = s$injuries,
+                fatinj = (0.75) * s$
+                propdmg = 
+                )
+e$date <- as.Date(s$bgn.date, "%m/%d/%Y %H:%M:%S")
+e$year <- factor(format(as.Date(s$bgn.date, "%m/%d/%Y %H:%M:%S"), format = "%Y"))
+e$month <- factor(format(as.Date(s$bgn.date, "%m/%d/%Y %H:%M:%S"), format = "%b"))
+
 
 ## With the dataset in its current form, there are four variable columns which
 ## are relevant to our research. They are
 
-
-
-## We want to convert NA values to zero
-
-naZ <- function(naz) {
-  
-}
 
 
 ## It appears that the data for monetary values was entered in two parts:
@@ -113,11 +141,18 @@ s$propnumeric()
 
 ## Function takes the column (vector) of the raw input multiplier data
 ## found in propdmgexp and cropdmgexp.
-convMultInput <- function(raw.col) {
-  ## A character vector of the known characters we know hjow to interpret
-  ## Note we did not add 't' among them as it can stand for either 'tens' or
-  ## 'trillions'. Common sense would have us rule out tens as it's so close to
-  ## the actual value as to be ignored as a multiplier (although 1 itself is
+
+addUpper <- function(lower.chars) {
+  return c(lower.chars, toupper(lower.chars))
+}
+
+cleanMultCol <- function(raw.col) {
+  ## Builds a character vector of the known characters/integers we know how to
+  ## interpret.
+  ##
+  ## Note that we did not add 't' among them as it can stand for either 'tens'
+  ## or 'trillions'. Common sense would have us rule out tens as it's so close
+  ## to the actual value as to be ignored as a multiplier (although 1 itself is
   ## used as a multiplier a few times). More likely is an event that may cost
   ## trillions, and we need to be able to handle this multiplier in case of a
   ## "mega-event" like a tsunami hitting NYC or Godzilla. Therefore we recommend
@@ -125,16 +160,54 @@ convMultInput <- function(raw.col) {
   ## mulitplier for the damage values on a case-by-case basis to determine
   ## whether the 't' is used to indicate a 'tens' or 'trillions' mulitplier, or
   ## was simply user error.
-  known.chars <- c(hundreds = "h",
-                   thousands = "k",
-                   millions = "m",
-                   billions = "b")
-  ## Add in their uppercase character equivalents
-  known.chars <- c(known.chars, toupper(known.chars))
   
-  clean.col <- numeric(length(conv.col))
-  clean.col <- 
-  clean.col[raw.col == "" | raw.col == "0" | raw.col == "")]
+  ## Presently written to account for both upper and lower case
+  hundred <- addUpper(c("h"))
+  thousand <- addUpper(c("k"))
+  million <- addUpper(c("m"))
+  billion <- addUpper(c("b"))
+  
+  valid.chars <- c(hundred,
+                   thousand,
+                   million,
+                   billion)
+  
+  
+  ## We will do not include 1 since it is more likely the person entered it
+  ## thinking it was meant to indicate the "ones' place". It will therefore
+  ## be converted to zero along with everything not a valid character or
+  ## integer.
+  valid.ints <- 2:9
+  
+  ## Vectors of characters that will be converted to numeric exponential of 10
+  ## First we build logical vectors for each int we want in our final column
+  ## of multiplier exponents (i.e. 0 and 2 through 9)
+
+  ## Also, this section would need to be modified by increasing the valid range
+  ## for conversion beyond 9.
+  to0 <- !(raw.col %in% valid.chars | raw.col %in% valid.ints)  
+
+  ## I really didn't want to repeat myself here but the code below (or LOC equal
+  ## to it) would more or less have to be written anyway due to the irregularity
+  ## of the valid characters to convert from. There's a way no doubt, I'm just
+  ## pressed for time to finish and probably am not as skilled in R to code it
+  ## off the cuff.
+  to2 <- raw.col == 2 | raw.col %in% hundred
+  to3 <- raw.col == 3 | raw.col %in% thousand
+  to4 <- raw.col == 4
+  to5 <- raw.col == 5
+  to6 <- raw.col == 6 | raw.col %in% million
+  to7 <- raw.col == 7
+  to8 <- raw.col == 8
+  to9 <- raw.col == 9 | raw.col %in% billion
+
+  cleaned.col[to0] <- 0
+  
+  for (i in valid.ints) {
+    cleaned.col[get(paste0("to",i)] <- i
+  }
+  
+  return cleaned.col
 }
 
 ```
