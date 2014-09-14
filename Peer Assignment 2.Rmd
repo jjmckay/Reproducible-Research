@@ -30,54 +30,57 @@ used in this anlaysis include:
 - [Storm Data FAQ Page](http://www.ncdc.noaa.gov/stormevents/faq.jsp)
 
 
-With the dataset in its current form, there are four primary variable columns
+With the dataset in its current form, there are five primary variable columns
 which are relevant to our research questions. They are:
+
+The type of storm event:
+- ***evtype*** : *factor* - The category name of the storm event observation
 
 With respect to population health:
 - ***fatalities*** : *numeric* - Fatalities. Deaths resulting directly from the
-observed storm.
+observed storm event.
 - ***injuries*** : *numeric* - Injuries. Injuries directly resulting directly from
-the observed storm.
+the observed storm event.
 
 And with respect to local economies:
 - ***propdmg*** : *numeric* - Monetary amount in USD of property damage resulting directly
-from theobserved storm.
+from the observed storm event.
 - ***cropdmg*** : *numeric* - Monetary amount in USD of crop damage resulting directly
-from the observed storm.
+from the observed storm event.
 
-The local economy variables are themselves modified by a column vector of
-multipliers which can be translated into E notation (e.g. 10E6 = 1,000,000)
-and multiplied with the monetary damage variables
+The local economy variables are effectively significands to a column vector of
+exponents which can be translated into scientific notation.
+(e.g. 10E6 = 1,000,000, or 3.5k = 3,500) and multiplied with the
+monetary damage variables
 - ***propdmgexp*** : *numeric* - An exponent of 10, together used to multiply with
 **propdmg**
 - ***cropdmgexp*** : *numeric* - An exponent of 10, together used to multiply with
 **cropdmg**
 
 
-```{r keepcols}
-health.cols <- c("fatalities", "injuries")
-econ.cols <- c("propdmg", "cropdmg")
-econmult.cols <- c("propdmgexp", "cropdmgexp")
-```
-
 The questions to answer are which events have the most impact on public health
 and local economy. Using what we are given, we will devise simple model for
 evaluating overall health impact by weighting both relevant variables and
-adding them. We will do the same with the economy variables.
+adding them. We will do the same with the economy variables. More sophisticated
+models could be used including those from this dataset which adjust weight of
+the impact by year's past or include the overall or max impact into its
+calculation. (And desired outside variables would include inflation and
+indirect costs.) But for the sake of this project/report we are keeping the
+model simple.
 
 ```{r impactmodelweights}
-fatality.weight <- 3/4
-injuries.weight <- 1 - fatality.weight
+fatality.wt <- 3/4
+injuries.wt <- 1 - fatality.wt
 
-propdmg.weight <- 3/4
-cropdmg.weight <- 1 - propdmg.weight
+propdmg.wt <- 3/4
+cropdmg.wt <- 1 - propdmg.wt
 ```
 
 The models we use will be:
 
-1. Public Health Impact Value = (`r fatality.weight`) * *fatalities* + (`r injuries.weight`) * *injuries*
+1. Public Health Impact Value = (`r fatality.wt`) * *fatalities* + (`r injuries.wt`) * *injuries*
 
-2. Local Economy Impact Value = (`r propdmg.weight`) * *property damage* + (`r cropdmg.weight`) * *crop damage*
+2. Local Economy Impact Value = (`r propdmg.wt`) * *property damage* + (`r cropdmg.wt`) * *crop damage*
 
 
 
@@ -92,61 +95,51 @@ sd <- read.csv(bzfile(file), stringsAsFactors = FALSE)
 colnames(s) <- tolower(colnames(s))
 colnames(s) <- gsub("_", ".", colnames(s))
 colnames(s)[1] <- "state"
+```
+This dataset is relatively large at the time of this writing, weighing in at:
+```{r showdataframesize}
+print(object.size(s), units = "Mb")
+```
+This is one reason we will build a clean, tidy dataset that is also slimmer.
+But first, we need some functions to assist us in cleaning some of the columns-
+more specifically, the economic value exponential variable columns.
 
-
-
-
-## Add a column with just the year as a factor using bgn.date as a source
-#s$year <- factor(strptime(which.max(as.Date(s$bgn.date, format = "%m/%d/%Y %H:%M:%S")), "%Y"))
-
-e <- data.frame(date = as.Date(s$bgn.date, "%m/%d/%Y %H:%M:%S"),
-                year = factor(format(as.Date(s$bgn.date, "%m/%d/%Y %H:%M:%S"), format = "%Y")),
-                month = factor(format(as.Date(s$bgn.date, "%m/%d/%Y %H:%M:%S"), format = "%b")),
-                evtype = factor(tolower(s$evtype)),
-                fatalities = s$fatalities,
-                injuries = s$injuries,
-                fatinj = (0.75) * s$
-                propdmg = 
-                )
-e$date <- as.Date(s$bgn.date, "%m/%d/%Y %H:%M:%S")
-e$year <- factor(format(as.Date(s$bgn.date, "%m/%d/%Y %H:%M:%S"), format = "%Y"))
-e$month <- factor(format(as.Date(s$bgn.date, "%m/%d/%Y %H:%M:%S"), format = "%b"))
-
-
-## With the dataset in its current form, there are four variable columns which
-## are relevant to our research. They are
-
-
-
-## It appears that the data for monetary values was entered in two parts:
-## a number and a multiplier. Worse yet, the multiplier which was
-
+```{r rawexpdata}
 table(s$propdmgexp)
 table(s$cropdmgexp)
-## A glimpse at the tables show us that approximately half of the values were
-## entered as-is and the others used a character to denote the place of the
-## value (i.e. 'M' or 'm' for millions, 'K' or 'k' for thousands). We can induce
-## that the integers represent the exponent of 10 as used in E notation (i.e. )
-## for multiplying the value (i.e. 5 represents a multiplyer of 10E5, or
-## 10,000). Characters such as '-', '?', and '+' account for less than .002%
-## of the property damage data:
+```
+A glimpse at the tables show us that approximately half of the values were
+entered as-is and the others used a character to denote the place of the
+value (i.e. 'M' or 'm' for millions, 'K' or 'k' for thousands). We can induce
+that the integers represent the exponent of 10 as used in E notation (i.e. )
+for multiplying the value (i.e. 5 represents a multiplyer of 10E5, or
+10,000). Characters such as '-', '?', and '+' account for less than .002%
+of the property damage data and less than .001% of the crop damage data:
+
+```{r garbagevaluepercentiles}
 round((sum(s$propdmgexp %in% c("-", '?', "+")) / nrow(s)) * 100, digits = 3)
-## and less than .001% of the crop damage data:
 round((sum(s$cropdmgexp %in% c("-", '?', "+")) / nrow(s)) * 100, digits = 3)
-## these values are likely user error and the associated values will be
-## considered entered as is.
+```
 
-## Conversion
-s$propnumeric()
+These garbage values are most likely user error and the associated values will
+be considered entered as is.
 
-## Function takes the column (vector) of the raw input multiplier data
-## found in propdmgexp and cropdmgexp.
 
-addUpper <- function(lower.chars) {
-  return c(lower.chars, toupper(lower.chars))
+```{r supportingcleaningfunctions}
+## First a small function to assist us in adding upper case versions to the
+## valid chars. If the uppercase versions of the valid characters change, then
+## this code will likely need to be dropped and the building of the valid.chars
+## variable be modified accordingly.
+addUpper <- function(c) {
+  cC <- c(c, toupper(c))
+  return(cC)
 }
 
-cleanMultCol <- function(raw.col) {
+## Function takes the column (vector) of the raw input for the exponential
+## multiplier data found in propdmgexp and cropdmgexp and converts it to
+## clean numerics.
+cleanExpCol <- function(raw.col) {
+  cleaned.col <- numeric(length(raw.col))
   ## Builds a character vector of the known characters/integers we know how to
   ## interpret.
   ##
@@ -204,29 +197,67 @@ cleanMultCol <- function(raw.col) {
   cleaned.col[to0] <- 0
   
   for (i in valid.ints) {
-    cleaned.col[get(paste0("to",i)] <- i
+    cleaned.col[get(paste0("to",i))] <- i
   }
   
-  return cleaned.col
+  return(cleaned.col)
 }
 
 ```
+
+Now that our supporting column cleaning function is built, we are ready to
+build the tidy dataframe.
+
+```{r buildtidydataframe}
+## Build a clean, tidy data frame from which to work with and call the data
+## we want to analyze. This enables us to drop the monstrousity that is the
+## original data frame we just imported.
+e <- data.frame(id = 1:nrow(s))
+
+e$date <- as.Date(s$bgn.date, "%m/%d/%Y %H:%M:%S")
+e$year <- factor(format(e$date, format = "%Y"))
+e$month <- factor(format(e$date, format = "%b"))
+e$stateoffice <- s$stateoffic
+
+e$evtype <- factor(tolower(s$evtype))
+e$fatalities <- s$fatalities
+e$injuries <- s$injuries
+e$healthimp <- fatality.wt * e$fatalities + injuries.wt * e$injuries
+
+e$propdmgsig <- s$propdmg
+e$propdmgexp <- cleanExpCol(s$propdmgexp)
+e$propdmg <- e$propdmgsig * 10^e$propdmgexp
+e$cropdmgsig <- s$cropdmg
+e$cropdmgexp <- cleanExpCol(s$cropdmgexp)
+e$cropdmg <- e$cropdmgsig * 10^e$cropdmgexp
+e$econimp <- propdmg.wt * e$propdmg + cropdmg.wt * e$cropdmg
+
+rm(s)
+
+```
+We should note here that the evtype variable is really junked up and contains
+numerous differentiations, misspellings, and conglomerations of the various
+names for the categories of storm events. If this report were real, time would
+need to be taken to clean that up as well- requiring much more manual
+manipulation.
 
 ###Events most harmful with respect to population health?
 
 ```{r eventdeathandinjuries}
 ## Death and injuries totals and averages by event
-di.tot <- with(s, aggregate(cbind(fatalities, injuries) ~ evtype, data = s, sum))
-di.ave <- with(s, aggregate(cbind(fatalities, injuries) ~ evtype, data = s, mean, na.rm = TRUE))
+hi.sum <- with(e, aggregate(cbind(healthimp) ~ evtype, data = s, sum))
+hi.ave <- with(e, aggregate(cbind(healthimp) ~ evtype, data = s, mean, na.rm = TRUE))
 
 # head(di[with(di, order(fatalities, injuries, decreasing = TRUE, na.last = NA)), ], 25)
 # head(di.ave[with(di.ave, order(fatalities, injuries, decreasing = TRUE, na.last = NA)), ], 25)
 
-t25.di.ave <- head(di.ave[with(di.ave, order(fatalities, injuries, decreasing = TRUE, na.last = NA)), ], 25)
-t25.di.tot <- head(di.tot[with(di.tot, order(fatalities, injuries, decreasing = TRUE, na.last = NA)), ], 25)
+t25.hi.sum <- head(hi.sum[with(hi.sum, order(healthimp, decreasing = TRUE, na.last = NA)), ], 25)
+t25.hi.ave <- head(hi.ave[with(hi.ave, order(healthimp, decreasing = TRUE, na.last = NA)), ], 25)
 
-qplot(di.ave$fatalities)
-# ggplot(di.ave, aes(x = evtype, y = fatalities)) + geom_bar(stat = "identity")
+qplot(hi.ave$fatalities)
+ggplot(t25.hi.sum, aes(evtype)) +
+  geom_bar(aes(healthimp, color = evtype)) +
+  coord_polar()
 
 ```
 
@@ -240,7 +271,8 @@ di.ave <- with(s, aggregate(cbind(fatalities, injuries) ~ evtype, data = s, mean
 t25.di.ave <- head(di.ave[with(di.ave, order(fatalities, injuries, decreasing = TRUE, na.last = NA)), ], 25)
 t25.di.tot <- head(di.tot[with(di.tot, order(fatalities, injuries, decreasing = TRUE, na.last = NA)), ], 25)
 
-
+propdmg.weight <- 3/4
+cropdmg.weight
 ```
 
 
