@@ -5,14 +5,27 @@ date: "Friday, September 12, 2014"
 output: html_document
 ---
 
+```{r setoptslibs}
+library(gridExtra)
+library(ggplot2)
+options(rpubs.upload.method = "internal")
+```
+
 ##Synopsis
+In our report we sought to find the types of storm events with the highest
+negative impact in categories of human health and to local economies. Using the
+Storm Events Database dataset, we were able to determine that the type of
+storm event with the highest impact to human health are 1) tornadoes,
+thunderstorm wind, and hail and 2) hurricanes and tropical storms. The former
+occurs with the greatest frequency and still his the highest average impact
+to health per storm event. In terms of economical impact, our model determined
+that flooding and heavy rain along with the previous two have the highest
+negative impact. Overall, tornadoes appear to be the worst threat to both
+health and economies of all storm events.
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 
 
-##Analysis
+##Data Processing
 
 We begin to answer our question using the dataset of observed storm events
 from the [National Climactic Data Center](http://www.ncdc.noaa.gov/) of the
@@ -34,17 +47,22 @@ With the dataset in its current form, there are five primary variable columns
 which are relevant to our research questions. They are:
 
 The type of storm event:
+
 - ***evtype*** : *factor* - The category name of the storm event observation
 
 With respect to population health:
+
 - ***fatalities*** : *numeric* - Fatalities. Deaths resulting directly from the
 observed storm event.
+
 - ***injuries*** : *numeric* - Injuries. Injuries directly resulting directly from
 the observed storm event.
 
 And with respect to local economies:
+
 - ***propdmg*** : *numeric* - Monetary amount in USD of property damage resulting directly
 from the observed storm event.
+
 - ***cropdmg*** : *numeric* - Monetary amount in USD of crop damage resulting directly
 from the observed storm event.
 
@@ -52,8 +70,10 @@ The local economy variables are effectively significands to a column vector of
 exponents which can be translated into scientific notation.
 (e.g. 10E6 = 1,000,000, or 3.5k = 3,500) and multiplied with the
 monetary damage variables
+
 - ***propdmgexp*** : *numeric* - An exponent of 10, together used to multiply with
 **propdmg**
+
 - ***cropdmgexp*** : *numeric* - An exponent of 10, together used to multiply with
 **cropdmg**
 
@@ -78,18 +98,18 @@ cropdmg.wt <- 1 - propdmg.wt
 
 The models we use will be:
 
-1. Public Health Impact Value = (`r fatality.wt`) * *fatalities* + (`r injuries.wt`) * *injuries*
+1. **Public Health Impact Value** = (`r fatality.wt`) * *fatalities* + (`r injuries.wt`) * *injuries*
 
-2. Local Economy Impact Value = (`r propdmg.wt`) * *property damage* + (`r cropdmg.wt`) * *crop damage*
+2. **Local Economy Impact Value** = (`r propdmg.wt`) * *property damage* + (`r cropdmg.wt`) * *crop damage*
 
 
 
 ```{r downloadpreprocess, cache = TRUE}
 url <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
 file <- "./data/stormdata.csv.bz2"
-dir.create("./data")
-download.file(url.zip, file)
-sd <- read.csv(bzfile(file), stringsAsFactors = FALSE)
+# Not downloading it again due to data usage caps; pretend it just did.
+#download.file(url, file)
+s <- read.csv(bzfile(file), stringsAsFactors = FALSE)
 
 ## Restyle column names
 colnames(s) <- tolower(colnames(s))
@@ -208,7 +228,7 @@ cleanExpCol <- function(raw.col) {
 Now that our supporting column cleaning function is built, we are ready to
 build the tidy dataframe.
 
-```{r buildtidydataframe}
+```{r buildtidydataframe, cache = TRUE}
 ## Build a clean, tidy data frame from which to work with and call the data
 ## we want to analyze. This enables us to drop the monstrousity that is the
 ## original data frame we just imported.
@@ -241,39 +261,79 @@ names for the categories of storm events. If this report were real, time would
 need to be taken to clean that up as well- requiring much more manual
 manipulation.
 
+##Results
+
 ###Events most harmful with respect to population health?
 
-```{r eventdeathandinjuries}
+```{r eventhealthimpact}
 ## Death and injuries totals and averages by event
-hi.sum <- with(e, aggregate(cbind(healthimp) ~ evtype, data = s, sum))
-hi.ave <- with(e, aggregate(cbind(healthimp) ~ evtype, data = s, mean, na.rm = TRUE))
+hi.sum <- aggregate(healthimp ~ evtype, sum, data = e)
+hi.ave <- aggregate(healthimp ~ evtype, mean, na.rm = TRUE, data = e)
 
-# head(di[with(di, order(fatalities, injuries, decreasing = TRUE, na.last = NA)), ], 25)
-# head(di.ave[with(di.ave, order(fatalities, injuries, decreasing = TRUE, na.last = NA)), ], 25)
+t25.hi.sum <- hi.sum[with(hi.sum, order(healthimp, decreasing = TRUE, na.last = NA)), ][1:10, ]
+t25.hi.ave <- hi.ave[with(hi.ave, order(healthimp, decreasing = TRUE, na.last = NA)), ][1:10, ]
 
-t25.hi.sum <- head(hi.sum[with(hi.sum, order(healthimp, decreasing = TRUE, na.last = NA)), ], 25)
-t25.hi.ave <- head(hi.ave[with(hi.ave, order(healthimp, decreasing = TRUE, na.last = NA)), ], 25)
 
-qplot(hi.ave$fatalities)
-ggplot(t25.hi.sum, aes(evtype)) +
-  geom_bar(aes(healthimp, color = evtype)) +
-  coord_polar()
+p.hi.sum <- ggplot(t25.hi.sum, aes(evtype, healthimp, fill = evtype)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  ylab("Total Health Impact") +
+  xlab("Storm Event Type")
 
+p.hi.ave <- ggplot(t25.hi.ave, aes(evtype, healthimp, fill = evtype)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  ylab("Average Health Impact") +
+  xlab("Storm Event Type")
+
+grid.arrange(p.hi.sum, p.hi.ave, ncol = 1)
 ```
 
-###Events most harmful with respect to local economy?
+The charts tell us that the type of storm with the qualitatively worst impact to
+human health are tornadoes. Not only are they dangerous, but there are a *lot*
+of them. They still lead in average amount of health impact per storm event but
+are not so outsized compared to the rest. In fact, the health impact of one
+storm alone, Tropical Storm Gordon, is right there with the average health
+impact of a tornado. The difference is that tropical storms and hurricanes
+hit populated areas with much less frequency and are generally forecasted
+days in advance. Tornadoes occur by in much shorter order. Also, the way events
+such as tornadoes are counted may have something to do with their frequency:
+tornadoes are counted as a separate storm event if they leave the ground and
+touchdown 5 minutes apart or greater. Therefore the same tornado can be counted
+as many different events. Hence, why the analysis on average impact was done so
+that we can account for this property of the data collection.
+
+###Events most harmful with respect to local economies?
 
 
-```{r eventpropertydamage}
-di.tot <- with(s, aggregate(cbind(fatalities, injuries) ~ evtype, data = s, sum))
-di.ave <- with(s, aggregate(cbind(fatalities, injuries) ~ evtype, data = s, mean, na.rm = TRUE))
+```{r eventeconomyimpact}
+## Death and injuries totals and averages by event
+ei.sum <- aggregate(econimp ~ evtype, sum, data = e)
+ei.ave <- aggregate(econimp ~ evtype, mean, na.rm = TRUE,  data = e)
 
-t25.di.ave <- head(di.ave[with(di.ave, order(fatalities, injuries, decreasing = TRUE, na.last = NA)), ], 25)
-t25.di.tot <- head(di.tot[with(di.tot, order(fatalities, injuries, decreasing = TRUE, na.last = NA)), ], 25)
+t25.ei.sum <- ei.sum[with(ei.sum, order(econimp, decreasing = TRUE, na.last = NA)), ][1:10, ]
+t25.ei.ave <- ei.ave[with(ei.ave, order(econimp, decreasing = TRUE, na.last = NA)), ][1:10, ]
 
-propdmg.weight <- 3/4
-cropdmg.weight
+p.ei.sum <- ggplot(t25.ei.sum, aes(evtype, econimp, fill = evtype)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  ylab("Total Economical Impact") +
+  xlab("Storm Event Type")
+  
+
+p.ei.ave <- ggplot(t25.ei.ave, aes(evtype, econimp, fill = evtype)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  ylab("Average Economical Impact") +
+  xlab("Storm Event Type")
+
+grid.arrange(p.ei.sum, p.ei.ave, ncol = 1)
 ```
 
+By far the largest amount of economical impact is from flooding, followed by
+tornadoes, typhoons, and storm surges-nothing too surprising there. When we
+look at average impact, tornadoes again result in the highest average amount of
+damage in monetary terms. They are followed closely by
+heavy rain/severe weather and hurricane/typhoon types of storm events.
 
 
